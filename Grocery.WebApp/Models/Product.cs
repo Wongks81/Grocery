@@ -41,6 +41,7 @@ namespace Grocery.WebApp.Models
         public Guid? UpdatedByUserId { get; set; }
 
         [Required]
+        //[DisplayFormat(DataFormatString ="{dd-MM-yyyy}")]
         public DateTime LastUpdateOn { get; set; }
         #endregion
 

@@ -49,6 +49,7 @@ namespace Grocery.WebApp.Areas.Admin.Controllers
                                 SellingPricePerUnit = p.SellingPricePerUnit,
                                 Quantity = p.Quantity,
                                 Image = p.Image,
+                                LastUpdateOn = p.LastUpdateOn,
 
                                 CreatedByUser = p.CreatedByUser,
                                 CreatedByUserId = p.CreatedByUserId,
@@ -136,23 +137,101 @@ namespace Grocery.WebApp.Areas.Admin.Controllers
         }
 
         // GET: ProductsController/Edit/5
-        public ActionResult Edit(Guid id)
+        public async Task<ActionResult> Edit(Guid? id)
         {
-            return View();
+
+
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            Product productToEdit = await _context.Products.FindAsync(id);
+
+            ProductViewModel productViewModel = new ProductViewModel()
+            {
+                ProductID = productToEdit.ProductID,
+                ProductName = productToEdit.ProductName,
+                SellingPricePerUnit = productToEdit.SellingPricePerUnit,
+                Quantity = productToEdit.Quantity,
+                Image = productToEdit.Image,
+
+                LastUpdateOn = productToEdit.LastUpdateOn,
+                CreatedByUserId = productToEdit.CreatedByUserId,
+                CreatedByUser = productToEdit.CreatedByUser,
+                UpdatedByUserId = productToEdit.UpdatedByUserId,
+                UpdatedByUser = productToEdit.UpdatedByUser     
+            };
+
+            return View(productViewModel);
         }
 
         // POST: ProductsController/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public ActionResult Edit(Guid id, IFormCollection collection)
+        public async Task<IActionResult> Edit(Guid id, 
+            [Bind("ProductID,ProductName,Quantity,SellingPricePerUnit,Image,CreatedByUserId,UpdatedByUserId,LastUpdateOn")] 
+            ProductViewModel productViewModel)
         {
+            var user = await _userManager.GetUserAsync(User);
+            if (user == null)
+            {
+                ModelState.AddModelError("Create", "User not found. Please login again!");
+            }
+
+            //if model object is not valid
+            if (!ModelState.IsValid)
+            {
+                return View(productViewModel);
+            }
+
+            // find the data in the database
+            Product editProduct = await _context.Products.FindAsync(productViewModel.ProductID);
+            if(editProduct == null)
+            {
+                return NotFound();
+            }
+
+            // update the properties of the model 
+            editProduct.ProductName = productViewModel.ProductName;
+            editProduct.SellingPricePerUnit = productViewModel.SellingPricePerUnit;
+            editProduct.Quantity = productViewModel.Quantity;
+
+            editProduct.LastUpdateOn = DateTime.Now;
+            editProduct.CreatedByUserId = user.Id;
+
+            //check if file has been attached
+            if (Request.Form.Files.Count >= 1)
+            {
+
+                // Might not work everywhere
+                //IFormFile file = productViewModel.ImageFile;
+
+                IFormFile file = Request.Form.Files.FirstOrDefault();
+
+                // copy the file uploaded using the MemoryStream into the Product.Image
+                using (var dataStream = new MemoryStream())
+                {
+                    await file.CopyToAsync(dataStream);
+
+                    // convert to bytearray for uploading pics
+                    editProduct.Image = dataStream.ToArray();
+                }
+            }
+
             try
             {
+                // update the database
+                _context.Products.Update(editProduct);
+                _context.SaveChanges();
                 return RedirectToAction(nameof(Index));
+
             }
-            catch
+            catch (System.Exception ex)
             {
-                return View();
+                ModelState.AddModelError("Edit", "Unable to update the Database. Please inform IT!");
+                _logger.LogError($"Edit Product failed: {ex.Message}");
+                return View(productViewModel);
             }
         }
 
